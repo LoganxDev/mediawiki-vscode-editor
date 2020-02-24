@@ -3,14 +3,15 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { QuickPickItem, window, Disposable, CancellationToken, QuickInputButton, QuickInput, ExtensionContext, QuickInputButtons, Uri } from 'vscode';
+import { QuickPickItem, window, Disposable, CancellationToken, QuickInputButton, QuickInput, ExtensionContext, QuickInputButtons, Uri, DebugConsoleMode } from 'vscode';
+import { SrvRecord } from 'dns';
 
 /**
  * A multi-step input using window.createQuickPick() and window.createInputBox().
  *
  * This first part uses the helper class `MultiStepInput` that wraps the API for the multi-step case.
  */
-export async function multiStepInput(context: ExtensionContext) {
+export async function multiStepInput(context: ExtensionContext, fields: Array<string>) {
 
 	class MyButton implements QuickInputButton {
 		constructor(public iconPath: { light: Uri; dark: Uri; }, public tooltip: string) { }
@@ -29,73 +30,41 @@ export async function multiStepInput(context: ExtensionContext) {
 		title: string;
 		step: number;
 		totalSteps: number;
-		password: string;
-		username: string;
+		fields: (string|undefined)[];
+		collectedFields: { [key: string]: string; };
 	}
 
-	async function collectInputs() {
+	async function collectInputs(fields: Array<string>) {
 		const state = {} as Partial<State>;
-		await MultiStepInput.run(input => setUsername(input, state));
+		state.fields = fields;
+		state.step = 0;
+		state.collectedFields = {};
+		await MultiStepInput.run(input => collectField(input, state));
 		return state as State;
 	}
 
 	const title = 'Set Media Wiki Login Credentials';
 
-	async function setUsername(input: MultiStepInput, state: Partial<State>) {
-		state.username = await input.showInputBox({
-			title,
-			step: 1,
-			totalSteps: 2,
-            prompt: 'Enter Username',
-            value: typeof state.username === 'string' ? state.username : '',
-            validate: validateNameIsUnique,
-			shouldResume: shouldResume
-		});
-		return (input: MultiStepInput) => inputPassword(input, state);
+	async function collectField(input: MultiStepInput, state: Partial<State>) {
+		if (state && state.step !== undefined && state.fields && state.fields[state.step]) {
+			const currentField: string = state.fields[state.step]!;
+			state.collectedFields![currentField] = await input.showInputBox({
+				title,
+				step: state.step,
+				totalSteps: state.fields.length,
+				prompt: 'Enter ' + state.fields[state.step],
+				value: typeof state.collectedFields![currentField] === 'string' ? state.collectedFields![currentField] : '',
+				validate: validateNameIsUnique,
+				shouldResume: shouldResume
+			});
+			if (state.fields[state.step] && state.fields[state.fields.length - 1]) {
+				if (fields[state.step] !== state.fields[state.fields.length - 1]) {
+					state.step += 1;
+					return (input: MultiStepInput) => collectField(input, state);
+				}
+			}
+		}
 	}
-
-	async function inputPassword(input: MultiStepInput, state: Partial<State>) {
-		state.password = await input.showInputBox({
-			title,
-			step: 2,
-			totalSteps: 2,
-			value: typeof state.password === 'string' ? state.password : '',
-			prompt: 'Enter Password',
-			validate: validateNameIsUnique,
-			shouldResume: shouldResume
-		});
-		// return (input: MultiStepInput) => inputName(input, state);
-	}
-
-	// async function inputName(input: MultiStepInput, state: Partial<State>) {
-	// 	const additionalSteps = typeof state.resourceGroup === 'string' ? 1 : 0;
-	// 	// TODO: Remember current value when navigating back.
-	// 	state.name = await input.showInputBox({
-	// 		title,
-	// 		step: 2 + additionalSteps,
-	// 		totalSteps: 3 + additionalSteps,
-	// 		value: state.name || '',
-	// 		prompt: 'Choose a unique name for the Application Service',
-	// 		validate: validateNameIsUnique,
-	// 		shouldResume: shouldResume
-	// 	});
-	// 	return (input: MultiStepInput) => pickRuntime(input, state);
-	// }
-
-	// async function pickRuntime(input: MultiStepInput, state: Partial<State>) {
-	// 	const additionalSteps = typeof state.resourceGroup === 'string' ? 1 : 0;
-	// 	const runtimes = await getAvailableRuntimes(state.resourceGroup!, undefined /* TODO: token */);
-	// 	// TODO: Remember currently active item when navigating back.
-	// 	state.runtime = await input.showQuickPick({
-	// 		title,
-	// 		step: 3 + additionalSteps,
-	// 		totalSteps: 3 + additionalSteps,
-	// 		placeholder: 'Pick a runtime',
-	// 		items: runtimes,
-	// 		activeItem: state.runtime,
-	// 		shouldResume: shouldResume
-	// 	});
-	// }
 
 	function shouldResume() {
 		// Could show a notification with the option to resume.
@@ -110,9 +79,9 @@ export async function multiStepInput(context: ExtensionContext) {
 		return name === 'vscode' ? 'Name not unique' : undefined;
 	}
 
-    const state = await collectInputs();
+	const state = await collectInputs(fields);
 	window.showInformationMessage(`Stored Credentials`);
-    return state;
+    return state.collectedFields;
 }
 
 

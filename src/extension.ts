@@ -24,15 +24,14 @@ async function setMediaWikiUrl(context: vscode.ExtensionContext) {
 };
 
 async function loginMediaWiki(context: vscode.ExtensionContext) {
-	const requestUrl: String = context.globalState.get('mediaWikiUrl') || '';
+	const requestUrl: string = context.globalState.get('mediaWikiUrl') || '';
 
 	console.log(requestUrl);
 
 	let result = await loginHelper(context, requestUrl);
 
 	// God this api takes a lot to login :skull:
-
-	console.log(result);
+	// console.log(result);
 };
 
 // this method is called when your extension is activated
